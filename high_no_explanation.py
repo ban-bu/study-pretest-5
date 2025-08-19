@@ -234,8 +234,68 @@ def get_ai_design_suggestions(user_preferences=None):
     except Exception as e:
         return {"error": f"Error getting AI design suggestions: {str(e)}"}
 
-def generate_vector_image(prompt, background_color=None):
-    """Generate a vector-style logo with transparent background using DashScope API"""
+def is_valid_logo(image, min_colors=3, min_non_transparent_pixels=1000):
+    """检查生成的logo是否有效（不是纯色或空白图像）"""
+    if image is None:
+        return False
+    
+    try:
+        # 转换为RGBA模式以便分析
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+        
+        # 获取所有像素数据
+        pixels = list(image.getdata())
+        
+        # 统计非透明像素
+        non_transparent_pixels = [p for p in pixels if len(p) >= 4 and p[3] > 50]  # alpha > 50
+        
+        # 检查是否有足够的非透明像素
+        if len(non_transparent_pixels) < min_non_transparent_pixels:
+            print(f"Logo验证失败：非透明像素数量不足 ({len(non_transparent_pixels)} < {min_non_transparent_pixels})")
+            return False
+        
+        # 统计颜色数量（忽略透明像素）
+        unique_colors = set()
+        for pixel in non_transparent_pixels:
+            # 只考虑RGB值，忽略alpha
+            rgb = (pixel[0], pixel[1], pixel[2])
+            unique_colors.add(rgb)
+        
+        # 检查颜色多样性
+        if len(unique_colors) < min_colors:
+            print(f"Logo验证失败：颜色数量不足 ({len(unique_colors)} < {min_colors})")
+            return False
+        
+        # 检查是否为纯色图像（所有非透明像素颜色相似）
+        if len(unique_colors) == 1:
+            print("Logo验证失败：图像为纯色")
+            return False
+        
+        # 检查颜色分布是否过于单一（主要颜色占比过高）
+        color_counts = {}
+        for pixel in non_transparent_pixels:
+            rgb = (pixel[0], pixel[1], pixel[2])
+            color_counts[rgb] = color_counts.get(rgb, 0) + 1
+        
+        # 找到最常见的颜色
+        most_common_color_count = max(color_counts.values())
+        dominant_color_ratio = most_common_color_count / len(non_transparent_pixels)
+        
+        # 如果单一颜色占比超过95%，认为是无效logo
+        if dominant_color_ratio > 0.95:
+            print(f"Logo验证失败：主要颜色占比过高 ({dominant_color_ratio:.2%})")
+            return False
+        
+        print(f"Logo验证通过：{len(unique_colors)}种颜色，{len(non_transparent_pixels)}个非透明像素，主要颜色占比{dominant_color_ratio:.2%}")
+        return True
+        
+    except Exception as e:
+        print(f"Logo验证过程中出错: {e}")
+        return False
+
+def generate_vector_image(prompt, background_color=None, max_retries=3):
+    """Generate a vector-style logo with transparent background using DashScope API with validation and retry"""
     
     # 构建矢量图logo专用的提示词
     vector_style_prompt = f"""创建一个矢量风格的logo设计: {prompt}
@@ -251,18 +311,29 @@ def generate_vector_image(prompt, background_color=None):
     9. 矢量插画风格，扁平化设计
     10. 重要：背景必须完全透明，不能有任何颜色填充
     11. 请生成PNG格式的透明背景图标
-    12. 图标应该是独立的，没有任何背景元素"""
+    12. 图标应该是独立的，没有任何背景元素
+    13. 确保logo有丰富的细节和多种颜色，避免纯色设计"""
     
-
+    # 如果DashScope不可用，直接返回None
+    if not DASHSCOPE_AVAILABLE:
+        st.error("DashScope API不可用，无法生成logo。请确保已正确安装dashscope库。")
+        return None
     
-    # 优先使用DashScope API
-    if DASHSCOPE_AVAILABLE:
+    # 尝试生成logo，最多重试max_retries次
+    for attempt in range(max_retries):
         try:
-            print(f'----使用DashScope生成矢量logo，提示词: {vector_style_prompt}----')
+            print(f'----第{attempt + 1}次尝试使用DashScope生成矢量logo，提示词: {vector_style_prompt}----')
+            
+            # 为重试添加随机性，避免生成相同的图像
+            if attempt > 0:
+                retry_prompt = f"{vector_style_prompt}\n\n变化要求: 请生成与之前不同的设计风格，尝试{['更加几何化', '更加有机化', '更加现代化'][attempt % 3]}的设计"
+            else:
+                retry_prompt = vector_style_prompt
+            
             rsp = ImageSynthesis.call(
                 api_key=DASHSCOPE_API_KEY,
                 model="wanx2.0-t2i-turbo",
-                prompt=vector_style_prompt,
+                prompt=retry_prompt,
                 n=1,
                 size='1024*1024'
             )
@@ -280,25 +351,45 @@ def generate_vector_image(prompt, background_color=None):
                         # 后处理：将白色背景转换为透明（使用更高的阈值）
                         img_processed = make_background_transparent(img, threshold=120)
                         print(f"背景透明化处理完成")
-                        return img_processed
+                        
+                        # 验证生成的logo是否有效
+                        if is_valid_logo(img_processed):
+                            print(f"Logo生成成功并通过验证（第{attempt + 1}次尝试）")
+                            return img_processed
+                        else:
+                            print(f"第{attempt + 1}次生成的logo未通过验证，准备重试...")
+                            if attempt < max_retries - 1:
+                                time.sleep(1)  # 短暂等待后重试
+                                continue
+                            else:
+                                print("所有重试都失败，返回最后一次生成的logo")
+                                return img_processed  # 即使验证失败，也返回最后的结果
                     else:
-                        st.error(f"下载图像失败, 状态码: {image_resp.status_code}")
+                        print(f"下载图像失败, 状态码: {image_resp.status_code}")
+                        if attempt < max_retries - 1:
+                            continue
             else:
                 print('DashScope调用失败, status_code: %s, code: %s, message: %s' %
                       (rsp.status_code, rsp.code, rsp.message))
-                st.error(f"DashScope API调用失败: {rsp.message}")
+                if attempt < max_retries - 1:
+                    print(f"第{attempt + 1}次调用失败，准备重试...")
+                    time.sleep(2)  # 等待后重试
+                    continue
+                else:
+                    st.error(f"DashScope API调用失败: {rsp.message}")
                 
         except Exception as e:
-            st.error(f"DashScope API调用错误: {e}")
-            print(f"DashScope错误: {e}")
+            print(f"第{attempt + 1}次DashScope调用出错: {e}")
+            if attempt < max_retries - 1:
+                print("准备重试...")
+                time.sleep(2)
+                continue
+            else:
+                st.error(f"DashScope API调用错误: {e}")
     
-    # 如果DashScope不可用，直接返回None
-    if not DASHSCOPE_AVAILABLE:
-        st.error("DashScope API不可用，无法生成logo。请确保已正确安装dashscope库。")
-        return None
-    
-    # DashScope失败时也直接返回None，不使用备选方案
-    st.error("DashScope API调用失败，无法生成logo。请检查网络连接或API密钥。")
+    # 所有重试都失败
+    print(f"经过{max_retries}次尝试，logo生成失败")
+    st.error("Logo生成失败，请检查网络连接或稍后重试。")
     return None
 
 def change_shirt_color(image, color_hex, apply_texture=False, fabric_type=None):
@@ -414,6 +505,12 @@ def apply_text_to_shirt(image, text, color_hex="#FFFFFF", font_size=80):
 def apply_logo_to_shirt(shirt_image, logo_image, position="center", size_percent=60, background_color=None):
     """Apply logo to T-shirt image with better blending to reduce shadows"""
     if logo_image is None:
+        print("Logo为空，跳过logo应用")
+        return shirt_image
+    
+    # 验证logo是否有效
+    if not is_valid_logo(logo_image):
+        print("Logo验证失败，跳过logo应用")
         return shirt_image
     
     # 创建副本避免修改原图
@@ -596,10 +693,17 @@ def generate_complete_design(design_prompt, variation_id=None):
             7. IMPORTANT: Create ONLY the logo graphic itself
             8. NO META REFERENCES - do not show the logo applied to anything
             9. Design should be a standalone graphic symbol/icon only
-            10. CRITICAL: Clean vector art style with crisp lines and solid colors"""
+            10. CRITICAL: Clean vector art style with crisp lines and solid colors
+            11. Ensure rich details and multiple colors to avoid solid color designs"""
             
-            # 生成透明背景的矢量logo
-            logo_image = generate_vector_image(logo_prompt)
+            # 生成透明背景的矢量logo，带有重试机制
+            print(f"开始生成logo: {logo_description}")
+            logo_image = generate_vector_image(logo_prompt, max_retries=3)
+            
+            if logo_image is None:
+                print(f"Logo生成失败，将继续生成不带logo的设计")
+            else:
+                print(f"Logo生成成功")
         
         # 最终设计 - 不添加文字
         final_design = colored_shirt

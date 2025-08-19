@@ -24,11 +24,11 @@ import concurrent.futures
 import time
 
 # API配置信息 - 实际使用时应从主文件传入或使用环境变量
-API_KEY = "sk-lNVAREVHjj386FDCd9McOL7k66DZCUkTp6IbV0u9970qqdlg"
+API_KEY = "sk-51a3e204ed83484db3b44e12d81c143e"
 BASE_URL = "https://api.deepbricks.ai/v1/"
 
 # GPT-4o-mini API配置
-GPT4O_MINI_API_KEY = "sk-lNVAREVHjj386FDCd9McOL7k66DZCUkTp6IbV0u9970qqdlg"
+GPT4O_MINI_API_KEY = "sk-51a3e204ed83484db3b44e12d81c143e"
 GPT4O_MINI_BASE_URL = "https://api.deepbricks.ai/v1/"
 
 # 从svg_utils导入SVG转换函数

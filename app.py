@@ -33,7 +33,7 @@ from streamlit_drawable_canvas import st_canvas
 # 导入OpenAI配置
 from openai import OpenAI
 # 从环境变量获取API密钥，确保部署安全
-API_KEY = os.getenv("OPENAI_API_KEY", "sk-lNVAREVHjj386FDCd9McOL7k66DZCUkTp6IbV0u9970qqdlg")
+API_KEY = os.getenv("OPENAI_API_KEY", "sk-51a3e204ed83484db3b44e12d81c143e")
 BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepbricks.ai/v1/")
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
 

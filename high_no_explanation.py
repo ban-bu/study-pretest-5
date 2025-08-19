@@ -55,7 +55,7 @@ GPT4O_MINI_API_KEYS = [
 GPT4O_MINI_BASE_URL = "https://api.deepbricks.ai/v1/"
 
 # 阿里云DashScope API配置
-DASHSCOPE_API_KEY = "sk-4f82c6e2097440f8adb2ef688c7c7551"
+DASHSCOPE_API_KEY = "sk-51a3e204ed83484db3b44e12d81c143e"
 
 # API密钥轮询计数器
 _api_key_counter = 0

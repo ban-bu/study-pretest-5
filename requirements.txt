@@ -1,0 +1,18 @@
+streamlit==1.43.2
+streamlit-drawable-canvas==0.9.3
+openai==1.66.3
+requests==2.32.3
+Pillow==11.1.0
+numpy<2.0.0
+streamlit-image-coordinates==0.2.0
+opencv-python-headless==4.9.0.80
+python-dotenv==1.0.0
+# SVG处理库
+svglib==1.5.1
+reportlab==4.0.9
+freetype-py==2.3.0
+cairosvg==2.7.1
+# 阿里云DashScope API
+dashscope==1.14.1
+# 额外依赖
+pandas==2.1.4
